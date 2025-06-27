@@ -247,7 +247,12 @@ def train_model(model, noisy_patches, clean_patches, batch_size=4, epochs=20):
     """Train the UWGAN model"""
     # Create datasets
     train_dataset = tf.data.Dataset.from_tensor_slices((noisy_patches, clean_patches))
-    train_dataset = train_dataset.shuffle(buffer_size=len(noisy_patches)).batch(batch_size)
+    train_dataset = (train_dataset
+        .shuffle(buffer_size=len(noisy_patches))
+        .batch(batch_size)
+        .cache()
+        .prefetch(tf.data.AUTOTUNE)
+    )
 
     # Callback for visualization
     class VisualizeCallback(keras.callbacks.Callback):
