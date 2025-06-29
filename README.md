@@ -4,11 +4,19 @@ This repository provides code for training a 3D U-WGAN model to denoise fMRI vol
 
 ## Dataset
 
-The code expects data from the [OpenNeuro ds005239 dataset](https://openneuro.org/datasets/ds005239/versions/1.0.1). Use the `openneuro` CLI to download it:
+You can obtain training data in two ways:
 
-```bash
-openneuro download --dataset ds005239 --version 1.0.1 --destination data
-```
+1. **Full dataset** – Download the entire [OpenNeuro ds005239 dataset](https://openneuro.org/datasets/ds005239/versions/1.0.1) using the `openneuro` CLI:
+
+   ```bash
+   openneuro download --dataset ds005239 --version 1.0.1 --destination data
+   ```
+
+2. **Streaming** – For a small subset of data you can stream volumes from the `ds002306` dataset with the `openneuro_stream` utility:
+
+   ```bash
+   python -m mri_denoise.openneuro_stream --output fmri_dataset_chunk.npy
+   ```
 
 ## Training
 
