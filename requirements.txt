@@ -4,3 +4,4 @@ matplotlib
 nibabel
 pandas
 scikit-image
+requests
