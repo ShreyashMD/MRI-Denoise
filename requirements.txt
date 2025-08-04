@@ -1,7 +1,4 @@
+keras==2.6.0
+numpy==1.24.0
+matplotlib==3.6.3
 tensorflow
-numpy
-matplotlib
-nibabel
-pandas
-scikit-image
-requests
