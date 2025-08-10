@@ -8,6 +8,17 @@ You can obtain training data in two ways:
 
 1. **Full dataset** – Download the entire [OpenNeuro ds005239 dataset](https://openneuro.org/datasets/ds005239/versions/1.0.1) using the `openneuro` CLI:
 
+    ```bash
+    openneuro download --dataset ds005239 --version 1.0.1 --destination data
+    ```
+
+2. **Sample subset** – Stream a few example files using the built-in downloader:
+
+    ```bash
+    python -m mri_denoise.openneuro_stream
+    ```
+
+    The script saves `fmri_dataset_chunk_1.npy` in the current directory.
 
 ## Training
 
