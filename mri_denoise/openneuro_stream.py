@@ -1,5 +1,10 @@
-import os, time, requests, tempfile, numpy as np, nibabel as nib
+import os
+import requests
+import tempfile
 from typing import List, Optional
+
+import nibabel as nib
+import numpy as np
 
 class OpenNeuroStreamer:
     def __init__(self, dataset_id: str = "ds002306"):
@@ -50,10 +55,10 @@ class OpenNeuroStreamer:
         return data
 
 
-# === RUN THE DOWNLOADER ===
-print("NOTEBOOK 1A: Downloading Specific Files (sub-01 to sub-03, run-02)")
-streamer = OpenNeuroStreamer()
-chunk_data = streamer.load_selected_files()
-if chunk_data:
-    np.save("/kaggle/working/fmri_dataset_chunk_1.npy", np.array(chunk_data, dtype=np.float32))
-    print("\nChunk saved successfully.")
+if __name__ == "__main__":
+    print("Downloading specific files (sub-01 to sub-03, run-02)")
+    streamer = OpenNeuroStreamer()
+    chunk_data = streamer.load_selected_files()
+    if chunk_data:
+        np.save("fmri_dataset_chunk_1.npy", np.array(chunk_data, dtype=np.float32))
+        print("Chunk saved successfully.")

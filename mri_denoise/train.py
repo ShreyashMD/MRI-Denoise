@@ -1,14 +1,18 @@
+import gc
 import os
+import time
+import nibabel as nib
 import numpy as np
+import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.layers import Input, Conv3D, Conv3DTranspose, LeakyReLU, BatchNormalization, Concatenate, Layer, Flatten, Dense
+from tensorflow.keras.layers import (
+    Input, Conv3D, Conv3DTranspose, LeakyReLU, BatchNormalization,
+    Concatenate, Layer, Flatten, Dense, AveragePooling3D,
+    GlobalAveragePooling3D, ReLU
+)
 from tensorflow.keras.models import Model
-import nibabel as nib
-import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib.pyplot as plt
-import gc
+from sklearn.model_selection import train_test_split
 
 tf.random.set_seed(42)
 np.random.seed(42)
@@ -94,11 +98,6 @@ def preprocess_data(data, patch_size=(32, 32, 8)):
     return patches, noisy_patches, (data_min, data_max)
 
 
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
-from tensorflow.keras.layers import *
-import numpy as np
 
 def dense_block(x, growth_rate=32, num_layers=4, name_prefix="dense"):
     """DenseNet-style dense block with feature concatenation"""
@@ -275,140 +274,6 @@ def build_critic(input_shape, growth_rate=16):
     output = Dense(1, name='critic_output')(x)
     
     return Model(inputs=inputs, outputs=output, name='DenseNet_Critic')
-
-class GradientPenaltyLayer(Layer):
-    def __init__(self, critic, gp_weight=10.0, **kwargs):
-        super(GradientPenaltyLayer, self).__init__(**kwargs)
-        self.critic = critic
-        self.gp_weight = gp_weight
-    
-    def call(self, inputs):
-        real_images, fake_images = inputs
-        batch_size = tf.shape(real_images)[0]
-        
-        # Random interpolation
-        alpha = tf.random.uniform([batch_size, 1, 1, 1, 1], 0.0, 1.0)
-        interpolated = alpha * real_images + (1 - alpha) * fake_images
-        
-        with tf.GradientTape() as tape:
-            tape.watch(interpolated)
-            pred = self.critic(interpolated, training=True)
-        
-        gradients = tape.gradient(pred, interpolated)
-        gradients_squared = tf.square(gradients)
-        gradients_squared_sum = tf.reduce_sum(gradients_squared, axis=[1, 2, 3, 4])
-        gradient_l2_norm = tf.sqrt(gradients_squared_sum + 1e-8)  # Add epsilon for stability
-        gradient_penalty = self.gp_weight * tf.square(gradient_l2_norm - 1.0)
-        
-        return tf.reduce_mean(gradient_penalty)
-
-class DenseNetWGAN(keras.Model):
-    def __init__(self, input_shape, critic_extra_steps=5, gp_weight=10.0, l1_weight=100.0):
-        super(DenseNetWGAN, self).__init__()
-        self.input_shape = input_shape
-        self.generator = build_generator(input_shape)
-        self.critic = build_critic(input_shape)
-        self.critic_extra_steps = critic_extra_steps
-        self.gp_weight = gp_weight
-        self.l1_weight = l1_weight
-        self.gp_layer = GradientPenaltyLayer(self.critic, gp_weight)
-        
-        # Optimizers with parameters from fMRI denoising research
-        self.generator_optimizer = keras.optimizers.Adam(
-            learning_rate=1e-4, beta_1=0.0, beta_2=0.9
-        )
-        self.critic_optimizer = keras.optimizers.Adam(
-            learning_rate=1e-4, beta_1=0.0, beta_2=0.9
-        )
-        
-        # Print model summaries
-        print("Generator Architecture:")
-        self.generator.summary()
-        print("\nCritic Architecture:")
-        self.critic.summary()
-    
-    def compile(self, **kwargs):
-        super(DenseNetWGAN, self).compile(**kwargs)
-    
-    @tf.function
-    def train_critic(self, noisy_images, real_images):
-        noisy_images = tf.cast(noisy_images, tf.float32)
-        real_images = tf.cast(real_images, tf.float32)
-        
-        with tf.GradientTape() as tape:
-            fake_images = self.generator(noisy_images, training=True)
-            real_output = self.critic(real_images, training=True)
-            fake_output = self.critic(fake_images, training=True)
-            
-            # Wasserstein loss
-            critic_loss = tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)
-            
-            # Gradient penalty
-            gp = self.gp_layer([real_images, fake_images])
-            critic_loss += gp
-        
-        gradients = tape.gradient(critic_loss, self.critic.trainable_variables)
-        self.critic_optimizer.apply_gradients(zip(gradients, self.critic.trainable_variables))
-        
-        return critic_loss
-    
-    @tf.function
-    def train_generator(self, noisy_images, real_images):
-        noisy_images = tf.cast(noisy_images, tf.float32)
-        real_images = tf.cast(real_images, tf.float32)
-        
-        with tf.GradientTape() as tape:
-            fake_images = self.generator(noisy_images, training=True)
-            fake_output = self.critic(fake_images, training=True)
-            
-            # Wasserstein loss
-            wasserstein_loss = -tf.reduce_mean(fake_output)
-            
-            # L1 loss for fMRI denoising
-            l1_loss = tf.reduce_mean(tf.abs(fake_images - real_images)) * self.l1_weight
-            
-            # Total generator loss
-            total_gen_loss = wasserstein_loss + l1_loss
-        
-        gradients = tape.gradient(total_gen_loss, self.generator.trainable_variables)
-        self.generator_optimizer.apply_gradients(zip(gradients, self.generator.trainable_variables))
-        
-        return total_gen_loss, wasserstein_loss, l1_loss
-    
-    def train_step(self, data):
-        noisy_images, real_images = data
-        
-        # Train critic multiple times
-        for i in range(self.critic_extra_steps):
-            c_loss = self.train_critic(noisy_images, real_images)
-        
-        # Train generator once
-        g_loss, g_wasserstein, g_l1 = self.train_generator(noisy_images, real_images)
-        
-        return {
-            'critic_loss': c_loss,
-            'gen_loss': g_loss,
-            'wasserstein_loss': g_wasserstein,
-            'l1_loss': g_l1
-        }
-
-# Example usage:
-if __name__ == "__main__":
-    # Example for fMRI data (adjust dimensions as needed)
-    input_shape = (64, 64, 64, 1)  # Typical fMRI volume shape
-    
-    # Create model
-    model = DenseNetWGAN(
-        input_shape=input_shape,
-        critic_extra_steps=5,  # Standard for WGAN-GP
-        gp_weight=10.0,        # Standard gradient penalty weight
-        l1_weight=100.0        # L1 weight for fMRI denoising
-    )
-    
-    model.compile()
-    
-    print("DenseNet-WGAN model created successfully!")
-
 
 class GradientPenaltyLayer(keras.layers.Layer):
     def __init__(self, critic, gp_weight=10.0, **kwargs):
